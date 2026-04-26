@@ -1,0 +1,13 @@
+sample_rate = 2_400_000
+
+[[stations]]
+freq = 101_200_000
+name = "Radio 1"
+
+[[stations]]
+freq = 101_800_000
+name = "Radio 2"
+
+[[stations]]
+freq = 102_000_000
+name = "Radio 3"
