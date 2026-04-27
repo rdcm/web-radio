@@ -14,3 +14,7 @@ pub mod messages;
 pub mod router;
 #[path = "service.rs"]
 pub mod service;
+#[path = "spectrum_ingest_hub.rs"]
+pub mod spectrum_ingest_hub;
+#[path = "spectrum_listen_hub.rs"]
+pub mod spectrum_listen_hub;

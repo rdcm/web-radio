@@ -10,3 +10,13 @@ pub struct AudioChunk {
 pub struct AudioSubscribe {
     pub freq: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpectrumChunk {
+    pub center_freq: u64,
+    pub sample_rate: u32,
+    pub bins: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpectrumSubscribe {}
