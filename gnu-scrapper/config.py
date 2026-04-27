@@ -19,7 +19,7 @@ class Config:
         return (min(freqs) + max(freqs)) // 2
 
     @classmethod
-    def load(cls, path: str = "stations.toml") -> "Config":
+    def load(cls, path: str) -> "Config":
         with open(path, "rb") as f:
             raw = tomllib.load(f)
         return cls(

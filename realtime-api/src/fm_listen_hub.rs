@@ -1,6 +1,6 @@
 use crate::app_state::AppState;
 use crate::binary_codec::MsgpackCodec;
-use crate::messages::{FmChunk, FmSubscribe};
+use crate::messages::{AudioChunk, AudioSubscribe};
 use axum_signal::{MessageContext, WsHub};
 
 pub struct FmListenHub {
@@ -15,11 +15,11 @@ impl FmListenHub {
 
 impl WsHub for FmListenHub {
     type Codec = MsgpackCodec;
-    type InMessage = FmSubscribe;
-    type OutMessage = FmChunk;
+    type InMessage = AudioSubscribe;
+    type OutMessage = AudioChunk;
 
-    async fn on_message(&self, sub: FmSubscribe, ctx: MessageContext<FmChunk, MsgpackCodec>) {
-        let mut rx = self.state.fm_tx.subscribe();
+    async fn on_message(&self, sub: AudioSubscribe, ctx: MessageContext<AudioChunk, MsgpackCodec>) {
+        let mut rx = self.state.tx.subscribe();
         loop {
             match rx.recv().await {
                 Ok(chunk) if chunk.freq == sub.freq => ctx.unicast(chunk).await,

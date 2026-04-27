@@ -6,3 +6,6 @@ format:
 
 lint:
 	cargo clippy --release --all-targets
+
+run:
+	cargo run ./target/release/realtime-api

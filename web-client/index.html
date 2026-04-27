@@ -2,107 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>FM Radio</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            background: #111; color: #eee; font-family: sans-serif;
-            min-height: 100vh; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; gap: 24px;
-        }
-        h1 { font-size: 1.2rem; color: #888; letter-spacing: 2px; }
-        .stations { display: flex; flex-direction: column; gap: 10px; width: 300px; }
-        .station {
-            padding: 14px 20px; border-radius: 8px; border: 1px solid #333;
-            background: #1a1a1a; cursor: pointer; display: flex;
-            justify-content: space-between; align-items: center;
-            transition: border-color 0.2s;
-        }
-        .station:hover { border-color: #555; }
-        .station.active { border-color: #e63; background: #1f1010; }
-        .station .name { font-size: 1rem; }
-        .station .freq { font-size: 0.8rem; color: #666; }
-        .station.active .freq { color: #e63; }
-        #status { font-size: 0.85rem; color: #555; }
-    </style>
+    <title>Web Radio</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>📻 FM RADIO</h1>
-<div class="stations" id="stations"></div>
+<h1>📻 WEB RADIO</h1>
+<div id="groups"></div>
 <div id="status">Select station</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
-<script>
-    const STATIONS = [
-        { name: "Radio 1", freq: 101_200_000 },
-        { name: "Radio 2", freq: 101_800_000 },
-        { name: "Radio 3", freq: 102_000_000 },
-    ];
-
-    const SAMPLE_RATE = 48_000;
-    let ws = null;
-    let actx = null;
-    let nextTime = 0;
-    let activeFreq = null;
-
-    const container = document.getElementById("stations");
-    STATIONS.forEach(s => {
-        const el = document.createElement("div");
-        el.className = "station";
-        el.dataset.freq = s.freq;
-        el.innerHTML = `<span class="name">${s.name}</span>
-                  <span class="freq">${(s.freq / 1e6).toFixed(1)} MHz</span>`;
-        el.onclick = () => tune(s.freq, el);
-        container.appendChild(el);
-    });
-
-    function tune(freq, el) {
-        if (freq === activeFreq) return;
-
-        ws?.close();
-        actx?.close();
-
-        document.querySelectorAll(".station").forEach(e => e.classList.remove("active"));
-        el.classList.add("active");
-        activeFreq = freq;
-
-        actx = new AudioContext({ sampleRate: SAMPLE_RATE });
-        nextTime = actx.currentTime + 0.1;
-
-        ws = new WebSocket("ws://localhost:8020/ws/listen");
-        ws.binaryType = 'arraybuffer';
-        ws.onopen = () => {
-            const sub = msgpack.encode({ freq: freq });
-            ws.send(sub);
-            setStatus(`On Air — ${(freq / 1e6).toFixed(1)} MHz 🔴`);
-        };
-
-
-        ws.onmessage = ({ data }) => {
-            const msg = msgpack.decode(new Uint8Array(data));
-            const pcmBytes = new Uint8Array(msg.pcm);
-            const pcm = new Int16Array(pcmBytes.buffer);
-            const f32 = new Float32Array(pcm.length);
-            for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
-
-            const buf = actx.createBuffer(1, f32.length, SAMPLE_RATE);
-            buf.copyToChannel(f32, 0);
-
-            const src = actx.createBufferSource();
-            src.buffer = buf;
-            src.connect(actx.destination);
-
-            if (nextTime < actx.currentTime) nextTime = actx.currentTime + 0.05;
-            src.start(nextTime);
-            nextTime += buf.duration;
-        };
-
-        ws.onclose = () => setStatus("closed");
-    }
-
-    function setStatus(t) {
-        document.getElementById("status").textContent = t;
-    }
-</script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,33 @@
+sample_rate = 14_400_000
+
+[[stations]]
+freq = 122_700_000
+name = "North-1"
+
+[[stations]]
+freq = 123_400_000
+name = "West-1"
+
+[[stations]]
+freq = 125_300_000
+name = "South-1"
+
+[[stations]]
+freq = 127_200_000
+name = "North-2"
+
+[[stations]]
+freq = 128_000_000
+name = "West-2"
+
+[[stations]]
+freq = 129_800_000
+name = "East-1"
+
+[[stations]]
+freq = 131_200_000
+name = "East-2"
+
+[[stations]]
+freq = 134_000_000
+name = "South-2"
