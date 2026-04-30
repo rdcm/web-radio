@@ -1,55 +1,61 @@
 import asyncio
+import json
+import math
 import time
+import urllib.request
 import numpy as np
 import msgpack
 import websockets
 from gnuradio import gr, analog, filter as gr_filter
 import osmosdr
 
-from config import Config, Station
+from config import Config
 
-AUDIO_RATE = 48_000
-SPECTRUM_FFT_SIZE = 1024
-SPECTRUM_FPS = 20
+CHAN_DECIM = 20  # 9.6M → 480k
 
-send_queue: asyncio.Queue = asyncio.Queue(maxsize=512)
+send_queue:     asyncio.Queue = asyncio.Queue(maxsize=512)
 spectrum_queue: asyncio.Queue = asyncio.Queue(maxsize=64)
 
 
-class StationSink(gr.sync_block):
-    def __init__(self, station: Station, loop: asyncio.AbstractEventLoop):
-        super().__init__(f"sink_{station.freq}", [np.float32], [])
-        self.station = station
-        self.loop = loop
+class MultiSink(gr.sync_block):
+    """Single Python block for all audio channels — avoids per-channel GIL overhead."""
+    def __init__(self, freqs: list[int], loop: asyncio.AbstractEventLoop):
+        super().__init__("multi_sink", [np.float32] * len(freqs), [])
+        self.freqs = freqs
+        self.loop  = loop
 
     def work(self, input_items, _):
-        samples = input_items[0].copy()
-        pcm = (samples * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
-        msg = msgpack.packb({"freq": self.station.freq, "pcm": pcm})
-        asyncio.run_coroutine_threadsafe(send_queue.put(msg), self.loop)
-        return len(samples)
+        n = len(input_items[0])
+        for samples, freq in zip(input_items, self.freqs):
+            pcm = np.clip(samples * 32767, -32768, 32767).astype(np.int16).tobytes()
+            asyncio.run_coroutine_threadsafe(
+                send_queue.put(msgpack.packb({"freq": freq, "pcm": pcm})),
+                self.loop,
+            )
+        return n
 
 
 class SpectrumSink(gr.sync_block):
     def __init__(self, config: Config, loop: asyncio.AbstractEventLoop):
         super().__init__("spectrum_sink", [np.complex64], [])
         self.config = config
-        self.loop = loop
-        self.window = np.hanning(SPECTRUM_FFT_SIZE).astype(np.float32)
+        self.loop   = loop
+        self.window = np.hanning(config.spectrum_fft_size).astype(np.float32)
         self._last_send = 0.0
-        self._interval = 1.0 / SPECTRUM_FPS
+        self._interval  = 1.0 / config.spectrum_fps
 
     def work(self, input_items, _):
         samples = input_items[0]
         now = time.monotonic()
-        if now - self._last_send >= self._interval and len(samples) >= SPECTRUM_FFT_SIZE:
-            chunk = samples[:SPECTRUM_FFT_SIZE] * self.window
-            spectrum = np.fft.fftshift(np.abs(np.fft.fft(chunk))) / SPECTRUM_FFT_SIZE
+        fft_size = self.config.spectrum_fft_size
+        if now - self._last_send >= self._interval and len(samples) >= fft_size:
+            chunk    = samples[:fft_size] * self.window
+            spectrum = np.fft.fftshift(np.abs(np.fft.fft(chunk))) / fft_size
             power_db = (20 * np.log10(spectrum + 1e-10)).tolist()
             msg = msgpack.packb({
                 "center_freq": self.config.center_freq,
                 "sample_rate": self.config.sample_rate,
-                "bins": power_db,
+                "bins":        power_db,
             })
             asyncio.run_coroutine_threadsafe(spectrum_queue.put(msg), self.loop)
             self._last_send = now
@@ -68,26 +74,31 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
     src.set_bb_gain(20)
     tb._blocks.append(src)
 
-    for station in config.stations:
-        offset = station.freq - config.center_freq
-        shifter = gr_filter.freq_xlating_fir_filter_ccf(
-            1,
-            gr_filter.firdes.low_pass(1.0, config.sample_rate, 100_000, 50_000),
-            offset,
-            config.sample_rate,
-        )
-        k = config.sample_rate / (2 * 3.14159 * 75000)
-        quad = analog.quadrature_demod_cf(k)
-        decim = config.sample_rate // AUDIO_RATE
-        audio_taps = gr_filter.firdes.low_pass(1.0, config.sample_rate, 15_000, 8_000)
-        lpf = gr_filter.fir_filter_fff(decim, audio_taps)
-        sink = StationSink(station, loop)
-        tb._blocks.extend([shifter, quad, lpf, sink])
-        tb.connect(src, shifter, quad, lpf, sink)
+    chan_rate   = config.sample_rate // CHAN_DECIM   # 480_000
+    audio_decim = chan_rate // config.audio_rate      # 10
+    k_demod     = chan_rate / (2 * math.pi * 75_000)
 
-    spectrum_sink = SpectrumSink(config, loop)
-    tb._blocks.append(spectrum_sink)
-    tb.connect(src, spectrum_sink)
+    # Optimal transition: Nyquist(output) - cutoff = 240k - 100k = 140k
+    xlating_taps = gr_filter.firdes.low_pass(1.0, config.sample_rate, 100_000, 140_000)
+    audio_taps   = gr_filter.firdes.low_pass(1.0, chan_rate, 15_000, 8_000)
+
+    sink = MultiSink([s.freq for s in config.stations], loop)
+    tb._blocks.append(sink)
+
+    for i, station in enumerate(config.stations):
+        offset  = station.freq - config.center_freq
+        xlating = gr_filter.freq_xlating_fir_filter_ccf(
+            CHAN_DECIM, xlating_taps, offset, config.sample_rate,
+        )
+        quad = analog.quadrature_demod_cf(k_demod)
+        lpf  = gr_filter.fir_filter_fff(audio_decim, audio_taps)
+        tb.connect(src, xlating, quad, lpf, (sink, i))
+        tb._blocks.extend([xlating, quad, lpf])
+        print(f"[chain] {station.freq / 1e6:.3f} MHz  ({station.name})")
+
+    spec_sink = SpectrumSink(config, loop)
+    tb._blocks.append(spec_sink)
+    tb.connect(src, spec_sink)
 
     return tb
 
@@ -105,12 +116,21 @@ async def spectrum_sender(ws):
 
 
 async def main():
-    config = Config.load("stations-fm.toml")
+    config = Config.load()
+
+    stations_json = json.dumps([{"freq": s.freq, "name": s.name} for s in config.stations]).encode()
+    urllib.request.urlopen(urllib.request.Request(
+        f"{config.api_base}/stations",
+        data=stations_json, method="POST",
+        headers={"Content-Type": "application/json"},
+    ))
+    print(f"[stations] registered {len(config.stations)} stations")
+
     loop = asyncio.get_event_loop()
 
     async with (
-        websockets.connect("ws://localhost:8020/ws/ingest") as audio_ws,
-        websockets.connect("ws://localhost:8020/ws/ingest/spectrum") as spectrum_ws,
+        websockets.connect(f"{config.ws_base}/ws/ingest")         as audio_ws,
+        websockets.connect(f"{config.ws_base}/ws/ingest/spectrum") as spectrum_ws,
     ):
         print("building flowgraph...")
         tb = build_flowgraph(config, loop)
@@ -118,7 +138,10 @@ async def main():
         tb.start()
         print("started!")
         try:
-            await asyncio.gather(audio_sender(audio_ws), spectrum_sender(spectrum_ws))
+            await asyncio.gather(
+                audio_sender(audio_ws),
+                spectrum_sender(spectrum_ws),
+            )
         finally:
             tb.stop()
             tb.wait()

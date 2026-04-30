@@ -9,7 +9,7 @@ run-am:
 	uv run am-scrapper.py
 
 install-deps:
-	sudo dnf install gnuradio gr-osmosdr
+	sudo dnf install gnuradio gr-osmosdr gr-rds
 
 hack-rf-info:
 	hackrf_info

@@ -18,7 +18,11 @@ impl WsHub for SpectrumListenHub {
     type InMessage = SpectrumSubscribe;
     type OutMessage = SpectrumChunk;
 
-    async fn on_message(&self, _sub: SpectrumSubscribe, ctx: MessageContext<SpectrumChunk, MsgpackCodec>) {
+    async fn on_message(
+        &self,
+        _sub: SpectrumSubscribe,
+        ctx: MessageContext<SpectrumChunk, MsgpackCodec>,
+    ) {
         let mut rx = self.state.spectrum_tx.subscribe();
         loop {
             match rx.recv().await {

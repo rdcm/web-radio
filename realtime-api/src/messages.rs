@@ -20,3 +20,18 @@ pub struct SpectrumChunk {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpectrumSubscribe {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TuneCommand {
+    pub freq: u64,
+    pub modulation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControlSubscribe {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationInfo {
+    pub freq: u64,
+    pub name: String,
+}

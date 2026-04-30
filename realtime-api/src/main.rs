@@ -4,10 +4,7 @@ use realtime_api::service::Service;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let service = Service::new(&AppConfig {
-        api_listener_address: "127.0.0.1:8020".to_string(),
-    })
-    .await?;
-
+    let config = AppConfig::load("config.toml")?;
+    let service = Service::new(&config).await?;
     service.run().await
 }

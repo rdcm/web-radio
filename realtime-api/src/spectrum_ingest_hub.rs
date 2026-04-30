@@ -18,7 +18,11 @@ impl WsHub for SpectrumIngestHub {
     type InMessage = SpectrumChunk;
     type OutMessage = SpectrumChunk;
 
-    async fn on_message(&self, chunk: SpectrumChunk, _ctx: MessageContext<SpectrumChunk, MsgpackCodec>) {
+    async fn on_message(
+        &self,
+        chunk: SpectrumChunk,
+        _ctx: MessageContext<SpectrumChunk, MsgpackCodec>,
+    ) {
         let _ = self.state.spectrum_tx.send(chunk);
     }
 }

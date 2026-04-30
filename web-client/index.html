@@ -6,15 +6,29 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>📻 WEB RADIO</h1>
-<div id="waterfall-wrap">
-    <div class="group-label">SPECTRUM</div>
-    <canvas id="waterfall" width="512" height="200"></canvas>
+<div id="content">
+    <h1>📻 WEB RADIO</h1>
+    <div id="now-playing">
+        <div id="now-playing-main">
+            <span id="status">—</span>
+            <span id="modulation-badge"></span>
+        </div>
+        <div id="rds-info">
+            <span id="rds-ps"></span>
+        </div>
+    </div>
+    <div id="waterfall-wrap">
+        <div id="waterfall-container">
+            <canvas id="waterfall"></canvas>
+            <canvas id="waterfall-overlay"></canvas>
+        </div>
+        <canvas id="freq-scale"></canvas>
+        <div id="hover-freq"></div>
+    </div>
 </div>
-<div id="groups"></div>
-<div id="status">Select station</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js"></script>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

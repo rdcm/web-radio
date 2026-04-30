@@ -4,6 +4,8 @@ pub mod app_config;
 pub mod app_state;
 #[path = "binary_codec.rs"]
 pub mod binary_codec;
+#[path = "control_hub.rs"]
+pub mod control_hub;
 #[path = "fm_ingest_hub.rs"]
 pub mod fm_ingest_hub;
 #[path = "fm_listen_hub.rs"]
@@ -18,3 +20,5 @@ pub mod service;
 pub mod spectrum_ingest_hub;
 #[path = "spectrum_listen_hub.rs"]
 pub mod spectrum_listen_hub;
+#[path = "tune_hub.rs"]
+pub mod tune_hub;

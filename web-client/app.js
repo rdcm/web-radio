@@ -1,119 +1,86 @@
-const GROUPS = [
-    {
-        label: "FM",
-        stations: [
-            { name: "Radio 1", freq: 101_200_000 },
-            { name: "Radio 2", freq: 101_800_000 },
-            { name: "Radio 3", freq: 102_000_000 },
-        ],
-    },
-    {
-        label: "Aviation",
-        stations: [
-            { name: "North-1", freq: 122_700_000 },
-            { name: "West-1",  freq: 123_400_000 },
-            { name: "South-1", freq: 125_300_000 },
-            { name: "North-2", freq: 127_200_000 },
-            { name: "West-2",  freq: 128_000_000 },
-            { name: "East-1",  freq: 129_800_000 },
-            { name: "East-2",  freq: 131_200_000 },
-            { name: "South-2", freq: 134_000_000 },
-        ],
-    },
-];
+const stationNames = {};
 
-const SAMPLE_RATE = 48_000;
+fetch(`${CONFIG.apiBase}/stations`)
+    .then(r => r.json())
+    .then(list => { for (const s of list) stationNames[s.freq] = s.name; });
+
 let ws = null;
 let actx = null;
 let nextTime = 0;
 let activeFreq = null;
+let currentModulation = "fm";
 
-const container = document.getElementById("groups");
+function snapToChannel(freq) {
+    return Math.round(freq / 100_000) * 100_000;
+}
 
-GROUPS.forEach(group => {
-    const groupEl = document.createElement("div");
-    groupEl.className = "group";
-
-    const labelEl = document.createElement("div");
-    labelEl.className = "group-label";
-    labelEl.textContent = group.label;
-    groupEl.appendChild(labelEl);
-
-    const stationsEl = document.createElement("div");
-    stationsEl.className = "stations";
-
-    group.stations.forEach(s => {
-        const el = document.createElement("div");
-        el.className = "station";
-        el.dataset.freq = s.freq;
-        el.innerHTML = `<span class="name">${s.name}</span>
-                        <span class="freq">${(s.freq / 1e6).toFixed(1)} MHz</span>`;
-        el.onclick = () => tune(s.freq, el);
-        stationsEl.appendChild(el);
-    });
-
-    groupEl.appendChild(stationsEl);
-    container.appendChild(groupEl);
-});
-
-function tune(freq, el) {
+function tune(freq, el = null) {
+    freq = snapToChannel(freq);
     if (freq === activeFreq) return;
 
     ws?.close();
     actx?.close();
 
-    document.querySelectorAll(".station").forEach(e => e.classList.remove("active"));
-    el.classList.add("active");
     activeFreq = freq;
+    drawOverlay();
+    setStatus(`On Air — ${(freq / 1e6).toFixed(3)} MHz 🔴`, currentModulation);
+    const configName = stationNames[freq];
+    document.getElementById("rds-ps").textContent = configName || "";
 
-    actx = new AudioContext({ sampleRate: SAMPLE_RATE });
-    nextTime = actx.currentTime + 0.1;
+    actx = new AudioContext({ sampleRate: CONFIG.sampleRate });
+    nextTime = actx.currentTime + 0.3;
 
-    ws = new WebSocket("ws://localhost:8020/ws/listen");
-    ws.binaryType = "arraybuffer";
-    ws.onopen = () => {
-        const sub = msgpack.encode({ freq: freq });
-        ws.send(sub);
-        setStatus(`On Air — ${(freq / 1e6).toFixed(1)} MHz 🔴`);
+    const thisWs = ws = new WebSocket(`${CONFIG.wsBase}/ws/listen`);
+    thisWs.binaryType = "arraybuffer";
+    thisWs.onopen = () => {
+        thisWs.send(msgpack.encode({ freq: freq }));
     };
 
-    ws.onmessage = ({ data }) => {
+    thisWs.onmessage = ({ data }) => {
         const msg = msgpack.decode(new Uint8Array(data));
         const pcmBytes = new Uint8Array(msg.pcm);
         const pcm = new Int16Array(pcmBytes.buffer);
         const f32 = new Float32Array(pcm.length);
         for (let i = 0; i < pcm.length; i++) f32[i] = pcm[i] / 32768;
 
-        const buf = actx.createBuffer(1, f32.length, SAMPLE_RATE);
+        const buf = actx.createBuffer(1, f32.length, CONFIG.sampleRate);
         buf.copyToChannel(f32, 0);
 
         const src = actx.createBufferSource();
         src.buffer = buf;
         src.connect(actx.destination);
 
-        if (nextTime < actx.currentTime) nextTime = actx.currentTime + 0.05;
+        if (nextTime < actx.currentTime) nextTime = actx.currentTime + 0.2;
         src.start(nextTime);
         nextTime += buf.duration;
     };
 
-    ws.onclose = () => setStatus("Disconnected");
+    thisWs.onclose = () => { if (ws === thisWs) { activeFreq = null; setStatus("—", null); } };
 }
 
-function setStatus(t) {
-    document.getElementById("status").textContent = t;
+
+function setStatus(text, modulation) {
+    document.getElementById("status").textContent = text;
+    const badge = document.getElementById("modulation-badge");
+    if (modulation) {
+        badge.textContent = modulation;
+        badge.classList.add("visible");
+    } else {
+        badge.classList.remove("visible");
+    }
 }
 
 // Waterfall
 
-const DB_MIN = -100;
-const DB_MAX = -20;
+const DB_MIN = CONFIG.dbMin;
+const DB_MAX = CONFIG.dbMax;
 const COLORMAP = [
-    [  0,   0,   0],  // -100 dB: black
-    [  0,   0, 128],  //          dark blue
-    [  0,   0, 255],  //          blue
-    [  0, 255, 255],  //          cyan
-    [255, 255,   0],  //          yellow
-    [255, 255, 255],  //  -20 dB: white
+    [  0,   0,  15],
+    [  0,   0,  80],
+    [  0,  30, 200],
+    [  0, 160, 255],
+    [  0, 255, 200],
+    [  0, 220,  80],
 ];
 
 function dbToRgb(db) {
@@ -129,30 +96,183 @@ function dbToRgb(db) {
     ];
 }
 
+let spectrumMeta = null;
+
+function canvasXToFreq(canvas, clientX) {
+    if (!spectrumMeta) return null;
+    const { center_freq, sample_rate } = spectrumMeta;
+    const rect = canvas.getBoundingClientRect();
+    const t = (clientX - rect.left) / rect.width;
+    return center_freq - sample_rate / 2 + t * sample_rate;
+}
+
+function drawOverlay() {
+    if (!spectrumMeta) return;
+    const { center_freq, sample_rate } = spectrumMeta;
+
+    const overlay = document.getElementById("waterfall-overlay");
+    const dpr = window.devicePixelRatio || 1;
+    overlay.width  = Math.round((overlay.offsetWidth  || overlay.parentElement.clientWidth) * dpr);
+    overlay.height = Math.round((overlay.offsetHeight || 200) * dpr);
+    const ctx = overlay.getContext("2d");
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    if (!activeFreq) return;
+
+    const t = (activeFreq - (center_freq - sample_rate / 2)) / sample_rate;
+    if (t < 0 || t > 1) return;
+
+    const x = Math.round(t * overlay.width) + 0.5;
+    ctx.strokeStyle = "rgba(255, 60, 60, 0.9)";
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, overlay.height);
+    ctx.stroke();
+}
+
+function drawFreqScale() {
+    if (!spectrumMeta) return;
+    const { center_freq, sample_rate } = spectrumMeta;
+
+    const canvas = document.getElementById("freq-scale");
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.round((canvas.offsetWidth || canvas.parentElement.clientWidth) * dpr);
+    canvas.height = Math.round(24 * dpr);
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const freqStart = center_freq - sample_rate / 2;
+    const freqEnd   = center_freq + sample_rate / 2;
+
+    // minor ticks every 500 kHz
+    ctx.strokeStyle = "#2a2a2a";
+    ctx.lineWidth = 1;
+    const minorStep = 500_000;
+    for (let f = Math.ceil(freqStart / minorStep) * minorStep; f <= freqEnd; f += minorStep) {
+        const x = Math.round((f - freqStart) / sample_rate * w) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h * 0.3);
+        ctx.stroke();
+    }
+
+    // major ticks + labels every 1 MHz
+    ctx.strokeStyle = "#444";
+    ctx.fillStyle = "#555";
+    ctx.font = `${Math.round(9 * dpr)}px monospace`;
+    ctx.textAlign = "center";
+    const majorStep = 1_000_000;
+    for (let f = Math.ceil(freqStart / majorStep) * majorStep; f <= freqEnd; f += majorStep) {
+        const x = Math.round((f - freqStart) / sample_rate * w) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h * 0.45);
+        ctx.stroke();
+        ctx.fillText(`${(f / 1e6).toFixed(0)}`, x, h * 0.95);
+    }
+}
+
 function initWaterfall() {
     const canvas = document.getElementById("waterfall");
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth  = canvas.offsetWidth  || 900;
+    const cssHeight = 200;
+    canvas.width  = Math.round(cssWidth  * dpr);
+    canvas.height = Math.round(cssHeight * dpr);
+    canvas.style.width  = cssWidth  + "px";
+    canvas.style.height = cssHeight + "px";
     const ctx = canvas.getContext("2d");
-    const width = canvas.width;
-    const rowData = ctx.createImageData(width, 1);
+    const width  = canvas.width;
+    const height = canvas.height;
 
-    const ws = new WebSocket("ws://localhost:8020/ws/spectrum");
+    canvas.style.cursor = "crosshair";
+
+    const hoverEl = document.getElementById("hover-freq");
+
+    canvas.addEventListener("mousemove", (e) => {
+        const freq = canvasXToFreq(canvas, e.clientX);
+        hoverEl.textContent = freq ? `${(freq / 1e6).toFixed(3)} MHz` : "";
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+        hoverEl.textContent = "";
+    });
+
+    canvas.addEventListener("click", (e) => {
+        const freq = canvasXToFreq(canvas, e.clientX);
+        if (!freq) return;
+        tune(Math.round(freq / 1000) * 1000, null);
+    });
+
+    const ws = new WebSocket(`${CONFIG.wsBase}/ws/spectrum`);
     ws.binaryType = "arraybuffer";
     ws.onopen = () => ws.send(msgpack.encode({}));
+
+    const offscreen = document.createElement("canvas");
+    offscreen.width  = width;
+    offscreen.height = height;
+    const offCtx = offscreen.getContext("2d");
+
+    const rowData  = ctx.createImageData(width, 1);
+    const rowQueue = [];
+
+    const SCROLL_PPS = 20;
+    let lastTs  = null;
+    let accumPx = 0;
+
+    (function renderLoop(ts) {
+        requestAnimationFrame(renderLoop);
+        if (lastTs === null) { lastTs = ts; return; }
+
+        const dt = Math.min((ts - lastTs) / 1000, 0.1);
+        lastTs = ts;
+
+        if (rowQueue.length === 0) return;
+
+        accumPx += SCROLL_PPS * dt;
+        const steps = Math.floor(accumPx);
+        if (steps === 0) return;
+        accumPx -= steps;
+
+        const draw = Math.min(steps, rowQueue.length);
+
+        ctx.drawImage(offscreen, 0, 0, width, height - draw, 0, draw, width, height - draw);
+
+        for (let i = draw - 1; i >= 0; i--) {
+            rowData.data.set(rowQueue.shift());
+            ctx.putImageData(rowData, 0, i);
+        }
+
+        offCtx.drawImage(canvas, 0, 0);
+    })();
+
+    let initialized = false;
     ws.onmessage = ({ data }) => {
-        const { bins } = msgpack.decode(new Uint8Array(data));
+        const { bins, center_freq, sample_rate } = msgpack.decode(new Uint8Array(data));
 
-        ctx.drawImage(canvas, 0, 0, width, canvas.height - 1, 0, 1, width, canvas.height - 1);
+        if (!initialized) {
+            spectrumMeta = { center_freq, sample_rate };
+            drawFreqScale();
+            drawOverlay();
+            initialized = true;
+        }
 
+        const row = new Uint8ClampedArray(width * 4);
         for (let x = 0; x < width; x++) {
             const binIdx = Math.round(x * bins.length / width);
             const [r, g, b] = dbToRgb(bins[binIdx]);
             const o = x * 4;
-            rowData.data[o]     = r;
-            rowData.data[o + 1] = g;
-            rowData.data[o + 2] = b;
-            rowData.data[o + 3] = 255;
+            row[o]     = r;
+            row[o + 1] = g;
+            row[o + 2] = b;
+            row[o + 3] = 255;
         }
-        ctx.putImageData(rowData, 0, 0);
+        if (rowQueue.length < 60) rowQueue.push(row);
     };
 }
 

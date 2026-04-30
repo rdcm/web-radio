@@ -1,13 +1,111 @@
-sample_rate = 2_400_000
+[[stations]]
+freq = 93_200_000
+name = "Studio 21"
+
+[[stations]]
+freq = 93_400_000
+name = "FM 93.4"
+
+[[stations]]
+freq = 93_600_000
+name = "Kommersant FM"
+
+[[stations]]
+freq = 93_800_000
+name = "FM 93.8"
+
+[[stations]]
+freq = 94_100_000
+name = "FM 94.1"
+
+[[stations]]
+freq = 94_400_000
+name = "Pervoe Sportivnoe"
+
+[[stations]]
+freq = 94_600_000
+name = "FM 94.6"
+
+[[stations]]
+freq = 94_800_000
+name = "Govorit Moskva"
+
+[[stations]]
+freq = 95_200_000
+name = "Rock FM"
+
+[[stations]]
+freq = 95_600_000
+name = "Radio Zvezda"
+
+[[stations]]
+freq = 96_000_000
+name = "Dorogoe Radio"
+
+[[stations]]
+freq = 96_400_000
+name = "Taxi FM"
+
+[[stations]]
+freq = 96_800_000
+name = "Detskoe Radio"
+
+[[stations]]
+freq = 97_200_000
+name = "Radio KP"
+
+[[stations]]
+freq = 97_600_000
+name = "Vesti FM"
+
+[[stations]]
+freq = 98_000_000
+name = "Radio Chocolate"
+
+[[stations]]
+freq = 98_400_000
+name = "Novoe Radio"
+
+[[stations]]
+freq = 98_800_000
+name = "Radio Romantika"
+
+[[stations]]
+freq = 99_200_000
+name = "Radio Orfei"
+
+[[stations]]
+freq = 99_600_000
+name = "Russkiy Hit"
+
+[[stations]]
+freq = 100_100_000
+name = "Silver Rain"
+
+[[stations]]
+freq = 100_500_000
+name = "Zhara FM"
+
+[[stations]]
+freq = 100_900_000
+name = "Radio Vera"
 
 [[stations]]
 freq = 101_200_000
-name = "Radio 1"
+name = "DFM"
+
+[[stations]]
+freq = 101_500_000
+name = "Radio Rossii"
 
 [[stations]]
 freq = 101_800_000
-name = "Radio 2"
+name = "Nashe Radio"
 
 [[stations]]
-freq = 102_000_000
-name = "Radio 3"
+freq = 102_100_000
+name = "Monte Carlo"
+
+[[stations]]
+freq = 102_500_000
+name = "Comedy Radio"
