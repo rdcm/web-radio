@@ -24,11 +24,8 @@ impl WsHub for SpectrumListenHub {
         ctx: MessageContext<SpectrumChunk, MsgpackCodec>,
     ) {
         let mut rx = self.state.spectrum_tx.subscribe();
-        loop {
-            match rx.recv().await {
-                Ok(chunk) => ctx.unicast(chunk).await,
-                Err(_) => break,
-            }
+        while let Ok(chunk) = rx.recv().await {
+            ctx.unicast(chunk).await;
         }
     }
 }

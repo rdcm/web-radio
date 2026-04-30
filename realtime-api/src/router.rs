@@ -6,10 +6,10 @@ use crate::messages::StationInfo;
 use crate::spectrum_ingest_hub::SpectrumIngestHub;
 use crate::spectrum_listen_hub::SpectrumListenHub;
 use crate::tune_hub::TuneHub;
-use axum::routing::get;
-use axum::{Json, Router};
 use axum::extract::{State, WebSocketUpgrade};
 use axum::http::StatusCode;
+use axum::routing::get;
+use axum::{Json, Router};
 use axum_signal::{WsHubConfig, serve_hub};
 use tower_http::cors::CorsLayer;
 
@@ -102,4 +102,3 @@ pub fn realtime_recognition_router() -> Router<AppState> {
             ),
         )
 }
-

@@ -24,11 +24,8 @@ impl WsHub for ControlHub {
         ctx: MessageContext<TuneCommand, MsgpackCodec>,
     ) {
         let mut rx = self.state.tune_tx.subscribe();
-        loop {
-            match rx.recv().await {
-                Ok(cmd) => ctx.unicast(cmd).await,
-                Err(_) => break,
-            }
+        while let Ok(cmd) = rx.recv().await {
+            ctx.unicast(cmd).await;
         }
     }
 }
