@@ -91,7 +91,7 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
             audio_pass=3_500,
             audio_stop=4_000,
         )
-        agc = analog.agc_ff(1e-3, 1.0, 1.0)
+        agc = analog.agc2_ff(1e-1, 1e-3, 0.5, 100.0)
         tb.connect(src, xlating, demod, agc, (sink, i))
         tb._blocks.append(agc)
         tb._blocks.extend([xlating, demod])
