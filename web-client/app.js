@@ -4,7 +4,11 @@ let currentModulation = "fm";
 function loadStations(modulation) {
     fetch(`${CONFIG.apiBase}/stations/${modulation}`)
         .then(r => r.json())
-        .then(list => { for (const s of list) stationNames[s.freq] = s.name; });
+        .then(list => {
+            for (const key of Object.keys(stationNames)) delete stationNames[key];
+            for (const s of list) stationNames[s.freq] = s.name;
+            drawOverlay();
+        });
 }
 
 loadStations(currentModulation);
@@ -32,12 +36,13 @@ function selectModulation(modulation) {
     initWaterfall();
 }
 
-function snapToChannel(freq) {
-    return Math.round(freq / 100_000) * 100_000;
+function snapToStation(freq) {
+    const freqs = Object.keys(stationNames).map(Number);
+    if (freqs.length === 0) return null;
+    return freqs.reduce((a, b) => Math.abs(b - freq) < Math.abs(a - freq) ? b : a);
 }
 
 function tune(freq, el = null) {
-    freq = snapToChannel(freq);
     if (freq === activeFreq) return;
 
     ws?.close();
@@ -131,6 +136,7 @@ function canvasXToFreq(canvas, clientX) {
 function drawOverlay() {
     if (!spectrumMeta) return;
     const { center_freq, sample_rate } = spectrumMeta;
+    const freqStart = center_freq - sample_rate / 2;
 
     const overlay = document.getElementById("waterfall-overlay");
     const dpr = window.devicePixelRatio || 1;
@@ -140,14 +146,11 @@ function drawOverlay() {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
 
     if (!activeFreq) return;
-
-    const t = (activeFreq - (center_freq - sample_rate / 2)) / sample_rate;
+    const t = (activeFreq - freqStart) / sample_rate;
     if (t < 0 || t > 1) return;
-
     const x = Math.round(t * overlay.width) + 0.5;
     ctx.strokeStyle = "rgba(255, 60, 60, 0.9)";
     ctx.setLineDash([]);
-    ctx.lineWidth = 1 * dpr;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, overlay.height);
@@ -232,7 +235,8 @@ function initWaterfall() {
     canvas.addEventListener("click", (e) => {
         const freq = canvasXToFreq(canvas, e.clientX);
         if (!freq) return;
-        tune(Math.round(freq / 1000) * 1000, null);
+        const station = snapToStation(freq);
+        if (station !== null) tune(station, null);
     });
 
     if (waterfallAnimId !== null) cancelAnimationFrame(waterfallAnimId);

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioChunk {
     pub freq: u64,
-    pub pcm: Vec<i16>,
+    pub pcm: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
