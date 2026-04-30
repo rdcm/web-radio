@@ -1,5 +1,5 @@
-sample_rate = 9_600_000
-center_freq = 98_000_000
+sample_rate       = 14_400_000
+channel_rate      = 240_000
 audio_rate        = 48_000
 spectrum_fft_size = 1024
 spectrum_fps      = 20

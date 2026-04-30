@@ -11,8 +11,6 @@ import osmosdr
 
 from config import Config
 
-CHAN_DECIM = 20  # 9.6M → 480k
-
 send_queue:     asyncio.Queue = asyncio.Queue(maxsize=512)
 spectrum_queue: asyncio.Queue = asyncio.Queue(maxsize=64)
 
@@ -74,8 +72,9 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
     src.set_bb_gain(20)
     tb._blocks.append(src)
 
-    chan_rate   = config.sample_rate // CHAN_DECIM   # 480_000
-    audio_decim = chan_rate // config.audio_rate      # 10
+    chan_rate   = config.channel_rate
+    chan_decim  = config.sample_rate // chan_rate
+    audio_decim = chan_rate // config.audio_rate
     k_demod     = chan_rate / (2 * math.pi * 75_000)
 
     # Optimal transition: Nyquist(output) - cutoff = 240k - 100k = 140k
@@ -88,7 +87,7 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
     for i, station in enumerate(config.stations):
         offset  = station.freq - config.center_freq
         xlating = gr_filter.freq_xlating_fir_filter_ccf(
-            CHAN_DECIM, xlating_taps, offset, config.sample_rate,
+            chan_decim, xlating_taps, offset, config.sample_rate,
         )
         quad = analog.quadrature_demod_cf(k_demod)
         lpf  = gr_filter.fir_filter_fff(audio_decim, audio_taps)
