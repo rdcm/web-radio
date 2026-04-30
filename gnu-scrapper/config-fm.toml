@@ -1,3 +1,4 @@
+modulation        = "fm"
 sample_rate       = 9_600_000
 center_freq       = 98_000_000
 channel_rate      = 480_000

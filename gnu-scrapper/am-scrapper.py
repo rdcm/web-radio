@@ -79,7 +79,7 @@ async def main():
 
     stations_json = json.dumps([{"freq": s.freq, "name": s.name} for s in config.stations]).encode()
     urllib.request.urlopen(urllib.request.Request(
-        f"{config.api_base}/stations",
+        f"{config.api_base}/stations/{config.modulation}",
         data=stations_json, method="POST",
         headers={"Content-Type": "application/json"},
     ))
@@ -87,7 +87,7 @@ async def main():
 
     loop = asyncio.get_event_loop()
 
-    async with websockets.connect(f"{config.ws_base}/ws/ingest") as ws:
+    async with websockets.connect(f"{config.ws_base}/ws/ingest/{config.modulation}") as ws:
         print("building flowgraph...")
         tb = build_flowgraph(config, loop)
         print("starting...")

@@ -1,25 +1,25 @@
-use crate::app_state::AppState;
+use crate::app_state::BandState;
 use crate::binary_codec::MsgpackCodec;
 use crate::messages::{AudioChunk, AudioSubscribe};
 use axum_signal::{MessageContext, WsHub};
 
-pub struct FmListenHub {
-    pub state: AppState,
+pub struct AudioListenHub {
+    band: BandState,
 }
 
-impl FmListenHub {
-    pub fn new(state: AppState) -> Self {
-        Self { state }
+impl AudioListenHub {
+    pub fn new(band: BandState) -> Self {
+        Self { band }
     }
 }
 
-impl WsHub for FmListenHub {
+impl WsHub for AudioListenHub {
     type Codec = MsgpackCodec;
     type InMessage = AudioSubscribe;
     type OutMessage = AudioChunk;
 
     async fn on_message(&self, sub: AudioSubscribe, ctx: MessageContext<AudioChunk, MsgpackCodec>) {
-        let mut rx = self.state.tx.subscribe();
+        let mut rx = self.band.audio_tx.subscribe();
         loop {
             match rx.recv().await {
                 Ok(chunk) if chunk.freq == sub.freq => ctx.unicast(chunk).await,

@@ -10,6 +10,7 @@ class Station:
 
 @dataclass(frozen=True)
 class Config:
+    modulation: str
     sample_rate: int
     channel_rate: int
     audio_rate: int
@@ -37,6 +38,7 @@ class Config:
         with open(stations_path, "rb") as f:
             sta = tomllib.load(f)
         return cls(
+            modulation=cfg["modulation"],
             sample_rate=cfg["sample_rate"],
             channel_rate=cfg["channel_rate"],
             audio_rate=cfg["audio_rate"],

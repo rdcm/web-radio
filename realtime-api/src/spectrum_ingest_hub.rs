@@ -1,15 +1,15 @@
-use crate::app_state::AppState;
+use crate::app_state::BandState;
 use crate::binary_codec::MsgpackCodec;
 use crate::messages::SpectrumChunk;
 use axum_signal::{MessageContext, WsHub};
 
 pub struct SpectrumIngestHub {
-    state: AppState,
+    band: BandState,
 }
 
 impl SpectrumIngestHub {
-    pub fn new(state: AppState) -> Self {
-        Self { state }
+    pub fn new(band: BandState) -> Self {
+        Self { band }
     }
 }
 
@@ -23,6 +23,6 @@ impl WsHub for SpectrumIngestHub {
         chunk: SpectrumChunk,
         _ctx: MessageContext<SpectrumChunk, MsgpackCodec>,
     ) {
-        let _ = self.state.spectrum_tx.send(chunk);
+        let _ = self.band.spectrum_tx.send(chunk);
     }
 }

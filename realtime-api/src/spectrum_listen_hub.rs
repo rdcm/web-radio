@@ -1,15 +1,15 @@
-use crate::app_state::AppState;
+use crate::app_state::BandState;
 use crate::binary_codec::MsgpackCodec;
 use crate::messages::{SpectrumChunk, SpectrumSubscribe};
 use axum_signal::{MessageContext, WsHub};
 
 pub struct SpectrumListenHub {
-    pub state: AppState,
+    band: BandState,
 }
 
 impl SpectrumListenHub {
-    pub fn new(state: AppState) -> Self {
-        Self { state }
+    pub fn new(band: BandState) -> Self {
+        Self { band }
     }
 }
 
@@ -23,7 +23,7 @@ impl WsHub for SpectrumListenHub {
         _sub: SpectrumSubscribe,
         ctx: MessageContext<SpectrumChunk, MsgpackCodec>,
     ) {
-        let mut rx = self.state.spectrum_tx.subscribe();
+        let mut rx = self.band.spectrum_tx.subscribe();
         while let Ok(chunk) = rx.recv().await {
             ctx.unicast(chunk).await;
         }

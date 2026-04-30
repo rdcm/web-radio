@@ -1,3 +1,4 @@
+modulation        = "am"
 sample_rate       = 14_400_000
 channel_rate      = 240_000
 audio_rate        = 48_000

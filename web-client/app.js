@@ -1,14 +1,36 @@
 const stationNames = {};
+let currentModulation = "fm";
 
-fetch(`${CONFIG.apiBase}/stations`)
-    .then(r => r.json())
-    .then(list => { for (const s of list) stationNames[s.freq] = s.name; });
+function loadStations(modulation) {
+    fetch(`${CONFIG.apiBase}/stations/${modulation}`)
+        .then(r => r.json())
+        .then(list => { for (const s of list) stationNames[s.freq] = s.name; });
+}
+
+loadStations(currentModulation);
 
 let ws = null;
 let actx = null;
 let nextTime = 0;
 let activeFreq = null;
-let currentModulation = "fm";
+let spectrumWs = null;
+
+function selectModulation(modulation) {
+    if (modulation === currentModulation) return;
+    currentModulation = modulation;
+
+    document.querySelectorAll(".mod-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById(`btn-${modulation}`).classList.add("active");
+
+    ws?.close();
+    actx?.close();
+    activeFreq = null;
+    setStatus("—", null);
+    document.getElementById("rds-ps").textContent = "";
+
+    loadStations(modulation);
+    initWaterfall();
+}
 
 function snapToChannel(freq) {
     return Math.round(freq / 100_000) * 100_000;
@@ -30,7 +52,7 @@ function tune(freq, el = null) {
     actx = new AudioContext({ sampleRate: CONFIG.sampleRate });
     nextTime = actx.currentTime + 0.3;
 
-    const thisWs = ws = new WebSocket(`${CONFIG.wsBase}/ws/listen`);
+    const thisWs = ws = new WebSocket(`${CONFIG.wsBase}/ws/listen/${currentModulation}`);
     thisWs.binaryType = "arraybuffer";
     thisWs.onopen = () => {
         thisWs.send(msgpack.encode({ freq: freq }));
@@ -177,6 +199,9 @@ function drawFreqScale() {
     }
 }
 
+let waterfallRowQueue = [];
+let waterfallInitialized = false;
+
 function initWaterfall() {
     const canvas = document.getElementById("waterfall");
     const dpr = window.devicePixelRatio || 1;
@@ -209,17 +234,20 @@ function initWaterfall() {
         tune(Math.round(freq / 1000) * 1000, null);
     });
 
-    const ws = new WebSocket(`${CONFIG.wsBase}/ws/spectrum`);
-    ws.binaryType = "arraybuffer";
-    ws.onopen = () => ws.send(msgpack.encode({}));
+    spectrumMeta = null;
+    waterfallRowQueue = [];
+    waterfallInitialized = false;
+    spectrumWs?.close();
+    spectrumWs = new WebSocket(`${CONFIG.wsBase}/ws/spectrum/${currentModulation}`);
+    spectrumWs.binaryType = "arraybuffer";
+    spectrumWs.onopen = () => spectrumWs.send(msgpack.encode({}));
 
     const offscreen = document.createElement("canvas");
     offscreen.width  = width;
     offscreen.height = height;
     const offCtx = offscreen.getContext("2d");
 
-    const rowData  = ctx.createImageData(width, 1);
-    const rowQueue = [];
+    const rowData = ctx.createImageData(width, 1);
 
     const SCROLL_PPS = 20;
     let lastTs  = null;
@@ -232,34 +260,33 @@ function initWaterfall() {
         const dt = Math.min((ts - lastTs) / 1000, 0.1);
         lastTs = ts;
 
-        if (rowQueue.length === 0) return;
+        if (waterfallRowQueue.length === 0) return;
 
         accumPx += SCROLL_PPS * dt;
         const steps = Math.floor(accumPx);
         if (steps === 0) return;
         accumPx -= steps;
 
-        const draw = Math.min(steps, rowQueue.length);
+        const draw = Math.min(steps, waterfallRowQueue.length);
 
         ctx.drawImage(offscreen, 0, 0, width, height - draw, 0, draw, width, height - draw);
 
         for (let i = draw - 1; i >= 0; i--) {
-            rowData.data.set(rowQueue.shift());
+            rowData.data.set(waterfallRowQueue.shift());
             ctx.putImageData(rowData, 0, i);
         }
 
         offCtx.drawImage(canvas, 0, 0);
     })();
 
-    let initialized = false;
-    ws.onmessage = ({ data }) => {
+    spectrumWs.onmessage = ({ data }) => {
         const { bins, center_freq, sample_rate } = msgpack.decode(new Uint8Array(data));
 
-        if (!initialized) {
+        if (!waterfallInitialized) {
             spectrumMeta = { center_freq, sample_rate };
             drawFreqScale();
             drawOverlay();
-            initialized = true;
+            waterfallInitialized = true;
         }
 
         const row = new Uint8ClampedArray(width * 4);
@@ -272,7 +299,7 @@ function initWaterfall() {
             row[o + 2] = b;
             row[o + 3] = 255;
         }
-        if (rowQueue.length < 60) rowQueue.push(row);
+        if (waterfallRowQueue.length < 60) waterfallRowQueue.push(row);
     };
 }
 
