@@ -14,6 +14,7 @@ class Config:
     sample_rate: int
     channel_rate: int
     audio_rate: int
+    audio_gain: float
     spectrum_fft_size: int
     spectrum_fps: int
     api_base: str
@@ -42,6 +43,7 @@ class Config:
             sample_rate=cfg["sample_rate"],
             channel_rate=cfg["channel_rate"],
             audio_rate=cfg["audio_rate"],
+            audio_gain=cfg["audio_gain"],
             spectrum_fft_size=cfg["spectrum_fft_size"],
             spectrum_fps=cfg["spectrum_fps"],
             api_base=cfg["api_base"],

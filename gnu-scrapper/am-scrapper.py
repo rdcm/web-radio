@@ -16,15 +16,16 @@ spectrum_queue: asyncio.Queue = asyncio.Queue(maxsize=64)
 
 class MultiSink(gr.sync_block):
     """Single Python block for all audio channels — avoids per-channel GIL overhead."""
-    def __init__(self, freqs: list[int], loop: asyncio.AbstractEventLoop):
+    def __init__(self, freqs: list[int], gain: float, loop: asyncio.AbstractEventLoop):
         super().__init__("multi_sink", [np.float32] * len(freqs), [])
         self.freqs = freqs
+        self.gain  = gain
         self.loop  = loop
 
     def work(self, input_items, _):
         n = len(input_items[0])
         for samples, freq in zip(input_items, self.freqs):
-            pcm = np.clip(samples * 32767, -32768, 32767).astype(np.int16).tobytes()
+            pcm = np.clip(samples * self.gain * 32767, -32768, 32767).astype(np.int16).tobytes()
             asyncio.run_coroutine_threadsafe(
                 send_queue.put(msgpack.packb({"freq": freq, "pcm": pcm})),
                 self.loop,
@@ -76,7 +77,7 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
 
     channel_taps = gr_filter.firdes.low_pass(1.0, config.sample_rate, 10_000, 5_000)
 
-    sink = MultiSink([s.freq for s in config.stations], loop)
+    sink = MultiSink([s.freq for s in config.stations], config.audio_gain, loop)
     tb._blocks.append(sink)
 
     for i, station in enumerate(config.stations):
@@ -90,7 +91,9 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
             audio_pass=3_500,
             audio_stop=4_000,
         )
-        tb.connect(src, xlating, demod, (sink, i))
+        agc = analog.agc_ff(1e-3, 1.0, 1.0)
+        tb.connect(src, xlating, demod, agc, (sink, i))
+        tb._blocks.append(agc)
         tb._blocks.extend([xlating, demod])
         print(f"[chain] {station.freq / 1e6:.3f} MHz  ({station.name})")
 

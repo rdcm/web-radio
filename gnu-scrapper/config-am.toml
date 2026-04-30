@@ -2,6 +2,7 @@ modulation        = "am"
 sample_rate       = 14_400_000
 channel_rate      = 240_000
 audio_rate        = 48_000
+audio_gain        = 1.0
 spectrum_fft_size = 1024
 spectrum_fps      = 20
 api_base          = "http://localhost:8020"
