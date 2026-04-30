@@ -201,6 +201,7 @@ function drawFreqScale() {
 
 let waterfallRowQueue = [];
 let waterfallInitialized = false;
+let waterfallAnimId = null;
 
 function initWaterfall() {
     const canvas = document.getElementById("waterfall");
@@ -234,6 +235,7 @@ function initWaterfall() {
         tune(Math.round(freq / 1000) * 1000, null);
     });
 
+    if (waterfallAnimId !== null) cancelAnimationFrame(waterfallAnimId);
     spectrumMeta = null;
     waterfallRowQueue = [];
     waterfallInitialized = false;
@@ -254,7 +256,7 @@ function initWaterfall() {
     let accumPx = 0;
 
     (function renderLoop(ts) {
-        requestAnimationFrame(renderLoop);
+        waterfallAnimId = requestAnimationFrame(renderLoop);
         if (lastTs === null) { lastTs = ts; return; }
 
         const dt = Math.min((ts - lastTs) / 1000, 0.1);

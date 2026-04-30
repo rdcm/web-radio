@@ -49,3 +49,12 @@ h1 { font-size: 1.2rem; color: #888; letter-spacing: 2px; }
     height: 16px; font-size: 0.75rem; color: #555;
     letter-spacing: 1px; text-align: center;
 }
+
+#modulation-selector { display: flex; gap: 8px; }
+.mod-btn {
+    background: none; border: 1px solid #333; color: #555;
+    border-radius: 4px; padding: 4px 14px; font-size: 0.8rem;
+    letter-spacing: 2px; cursor: pointer; transition: all 0.15s;
+}
+.mod-btn:hover { border-color: #555; color: #999; }
+.mod-btn.active { border-color: #e63; color: #e63; }

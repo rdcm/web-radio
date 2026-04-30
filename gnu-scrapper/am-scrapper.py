@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import urllib.request
 import numpy as np
 import msgpack
@@ -9,7 +10,8 @@ import osmosdr
 
 from config import Config
 
-send_queue: asyncio.Queue = asyncio.Queue(maxsize=512)
+send_queue:     asyncio.Queue = asyncio.Queue(maxsize=512)
+spectrum_queue: asyncio.Queue = asyncio.Queue(maxsize=64)
 
 
 class MultiSink(gr.sync_block):
@@ -28,6 +30,33 @@ class MultiSink(gr.sync_block):
                 self.loop,
             )
         return n
+
+
+class SpectrumSink(gr.sync_block):
+    def __init__(self, config: Config, loop: asyncio.AbstractEventLoop):
+        super().__init__("spectrum_sink", [np.complex64], [])
+        self.config = config
+        self.loop   = loop
+        self.window = np.hanning(config.spectrum_fft_size).astype(np.float32)
+        self._last_send = 0.0
+        self._interval  = 1.0 / config.spectrum_fps
+
+    def work(self, input_items, _):
+        samples  = input_items[0]
+        now      = time.monotonic()
+        fft_size = self.config.spectrum_fft_size
+        if now - self._last_send >= self._interval and len(samples) >= fft_size:
+            chunk    = samples[:fft_size] * self.window
+            spectrum = np.fft.fftshift(np.abs(np.fft.fft(chunk))) / fft_size
+            power_db = (20 * np.log10(spectrum + 1e-10)).tolist()
+            msg = msgpack.packb({
+                "center_freq": self.config.center_freq,
+                "sample_rate": self.config.sample_rate,
+                "bins":        power_db,
+            })
+            asyncio.run_coroutine_threadsafe(spectrum_queue.put(msg), self.loop)
+            self._last_send = now
+        return len(samples)
 
 
 def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_block:
@@ -65,12 +94,22 @@ def build_flowgraph(config: Config, loop: asyncio.AbstractEventLoop) -> gr.top_b
         tb._blocks.extend([xlating, demod])
         print(f"[chain] {station.freq / 1e6:.3f} MHz  ({station.name})")
 
+    spec_sink = SpectrumSink(config, loop)
+    tb._blocks.append(spec_sink)
+    tb.connect(src, spec_sink)
+
     return tb
 
 
-async def sender(ws):
+async def audio_sender(ws):
     while True:
         msg = await send_queue.get()
+        await ws.send(msg)
+
+
+async def spectrum_sender(ws):
+    while True:
+        msg = await spectrum_queue.get()
         await ws.send(msg)
 
 
@@ -87,14 +126,20 @@ async def main():
 
     loop = asyncio.get_event_loop()
 
-    async with websockets.connect(f"{config.ws_base}/ws/ingest/{config.modulation}") as ws:
+    async with (
+        websockets.connect(f"{config.ws_base}/ws/ingest/{config.modulation}")          as audio_ws,
+        websockets.connect(f"{config.ws_base}/ws/ingest/{config.modulation}/spectrum") as spectrum_ws,
+    ):
         print("building flowgraph...")
         tb = build_flowgraph(config, loop)
         print("starting...")
         tb.start()
         print("started!")
         try:
-            await sender(ws)
+            await asyncio.gather(
+                audio_sender(audio_ws),
+                spectrum_sender(spectrum_ws),
+            )
         finally:
             tb.stop()
             tb.wait()
